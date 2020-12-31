@@ -4,8 +4,10 @@
 import png, argparse, logging, collections, csv, time
 
 class AllWhiteError(Exception): "content not found in image"
+class NotBarOrSpace(Exception): "trouble classifying region of barcode"
 
-Region = collections.namedtuple('Region', 'a b')
+RunLength = collections.namedtuple('RunLength', 'length level')
+Region = collections.namedtuple('Region', 'isbar length')
 
 def cluster_number(bars):
     "takes array of bar lengths (in x-units standardized from start pattern). returns which cluster this belongs to, used for decoding or error checking maybe"
@@ -56,52 +58,67 @@ class Clip:
             for i, (a, b) in enumerate(zip([None] + levels, levels + [None]))
             if a != b
         ]
-        run_lengths = [(ib - ia, leva) for (ia, leva), (ib, levb) in zip(runs[:-1], runs[1:])]
+        run_lengths = [RunLength(ib - ia, leva) for (ia, leva), (ib, levb) in zip(runs[:-1], runs[1:])]
         # warning: this isn't checking for like 0, 1, 2, 4, which is a long gray region that indicates troubling scan
-        assert all(length == 1 or level in (0, 255) for length, level in run_lengths) # crappy anti-aliasing if this fails; todo: config flag to allow this
+        assert all(tup.length == 1 or tup.level in (0, 255) for tup in run_lengths) # crappy anti-aliasing if this fails; todo: config flag to allow this
         # note: this is now doing super-resolution logic for the imperfect pixels. This is slightly more accurate than just thresholding at 128
-        chunks = []
-        assert run_lengths[0][1] == 255 # or else the loop crashes because it doesn't append an initial chunk
-        for length, level in run_lengths:
-            if level == 255:
-                chunks.append([])
+        chunks = [[]]
+        assert run_lengths[0].level == 255 # or else the loop crashes because it doesn't append an initial chunk. yes this is repeating levels[0] levels[-1] assert above
+        # note: we're assuming that bars + spaces hit 0 / 255, i.e. no 'just grays'. I think the (0, 255), (255, 0) assert checks this case but hmm.
+        for i, tup in enumerate(run_lengths):
+            # ugh these cases are messy and correctness depends on ordering
+            if tup.level == 255:
+                if chunks[-1] and chunks[-1][-1].level == 0:
+                    chunks.append([])
+                chunks[-1].append(tup)
+            elif tup.level == 0:
+                if chunks[-1] and chunks[-1][-1].level == 255:
+                    chunks.append([])
+                chunks[-1].append(tup)
             else:
-                chunks[-1].append((length, level))
-        # note: at this point space lengths are discarded. That's fine; we don't need them
-        # note: if any space is gray rather than white, this breaks
-        # todo: factor out this logic
-        bars = []
+                # note: i + 1 is safe because we know 0 and -1 indexes aren't gray
+                assert (run_lengths[i - 1].level, run_lengths[i + 1].level) in ((0, 255), (255, 0))
+                chunks[-1].append(tup)
+                chunks.append([tup])
+
+        regions = []
+        BAR = 0, 1
+        SPACE = 1, 0
         for chunk in chunks:
-            if not chunk:
-                continue
-            if len(chunk) == 1:
-                assert chunk[0][1] == 0
-            elif len(chunk) == 2:
-                assert sum(item[1] == 0 for item in chunk) == 1
-            elif len(chunk) == 3:
-                assert chunk[0][1] != 0 and chunk[2][1] != 0 and chunk[1][1] == 0
+            assert chunk
+            case = sum(tup.level == 255 for tup in chunk), sum(tup.level == 0 for tup in chunk)
+            assert case in (BAR, SPACE)
+            assert len(chunk) > 0 and len(chunk) <= 3
+            if case == BAR:
+                regions.append(Region(True, sum(tup.length * (1 - tup.level / 255) for tup in chunk)))
+            elif case == SPACE:
+                regions.append(Region(False, sum(tup.length * tup.level / 255 for tup in chunk)))
             else:
-                raise NotImplementedError('chunks must be 1/2/3')
-            bars.append(sum(length * (1 - level / 255) for length, level in chunk))
+                raise NotBarOrSpace(chunk)
+
+        assert round(sum(reg.length for reg in regions)) == sum(tup.length for tup in run_lengths) # make sure the de-antialiasing didn't change the total length
 
         # https://en.wikipedia.org/wiki/PDF417#Format
+        bars = [reg for reg in regions if reg.isbar]
         start = bars[:4] # start pattern
         stop = bars[-5:] # stop pattern
-        center = bars[4:-5] # left row, codewords, right row
         singles = start[1:] + stop[1:]
-        approxlen = sum(singles) / len(singles)
-        # logging.debug('approxlen %s', approxlen)
-        # limit = approxlen * 16 * 1.1 # pdf417 word starts with black bar, ends with white space, len 17, last unit is always space so 16. 1.1 slippage because idk.
-        assert len(center) % 4 == 0
+        approxlen = sum(reg.length for reg in singles) / len(singles)
+        len17 = approxlen * 17 # pdf417 word starts with black bar, ends with white space, len 17
+        # logging.debug('approxlen %s len17 %s regions %d', approxlen, len17, len(regions))
 
-        words = [center[4 * i:4 * (i+1)] for i in range(len(center) // 4)]
-        # assert all(word[-1].b - word[0].a <= limit for word in words) # todo: space lengths would be useful here for length-checking
+        center = regions[9:-10] # 4 bars * 2 (for space) + 1 (for quiet) at start, 5 * 2 at end (no + 1 because the extra space belongs to a word)
+        assert len(center) % 8 == 0 # 8 because each word has 4 bar + 4 space
+
+        words = [center[8 * i:8 * (i+1)] for i in range(len(center) // 8)]
+        assert all(round(10 * sum(reg.length for reg in word) / len17) == 10 for word in words) # i.e. test to 2 sigfigs
 
         return words, approxlen
 
     def parse_words(self):
         "raw_words (list of chunks of regions) to pdf417 encoding"
         # decoding rule is https://www.expresscorp.com/uploads/specifications/44/USS-PDF-417.pdf pg 3-4
+        raise NotImplementedError('port below to handle bar + space')
         for irow, row in enumerate(self.raw_words):
             bar_chunks = [[round(bar / self.est_x) for bar in chunk] for chunk in row]
             clusters = [cluster_number(chunk) for chunk in bar_chunks]

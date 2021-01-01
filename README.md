@@ -27,3 +27,5 @@ In particular:
 * tests. can be unit tests of individual routines or link it up to a barcode generator
 * more fully decode the standard, or use another library to decode the standard once codewords have been parsed
 * bugfixes as always
+* link to a better command-line barcode reader so I can archive this repo
+* support non-screenshot images (i.e. photos), preferably by using an external library to do the image scanning

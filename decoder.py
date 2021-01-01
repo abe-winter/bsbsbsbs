@@ -117,17 +117,33 @@ class Clip:
         # symbol_len_descriptor = self.coderows[0][1]
         # print(sum(map(len, self.coderows)) - 2 * len(self.coderows), symbol_len_descriptor)
         # assert sum(map(len, self.coderows)) == symbol_len_descriptor
-        chars = []
+        chunks = [[]]
+        state = MainState()
+        text_state = TextState()
         for row in self.coderows:
             for point in row[1:-1]: # ignoring LRI / RRI for now
                 if point > 899:
-                    print('command', point)
+                    state.command(point)
+                    # todo: does text_state reset here?
+                    chunks.append([])
                 else:
-                    hichar = point // 30
-                    lowchar = point % 30
-                    chars.append(self.text_codes['alpha'][hichar])
-                    chars.append(self.text_codes['alpha'][lowchar])
-        print(chars)
+                    mode = state.state()
+                    state.tick()
+                    if mode == 'text':
+                        hichar = point // 30
+                        lowchar = point % 30
+                        for char in (hichar, lowchar):
+                            processed = self.text_codes[text_state.state()][char]
+                            text_state.tick()
+                            if isinstance(processed, int):
+                                chunks[-1].append(chr(processed))
+                            else:
+                                text_state.command(processed)
+                    elif mode == 'byte':
+                        print('todo byte')
+                    elif mode == 'num':
+                        print('todo num')
+        print(chunks)
         raise NotImplementedError
 
 def decode_417(fname):

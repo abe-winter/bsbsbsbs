@@ -66,11 +66,12 @@ class Clip:
         self.coderows = coderows
 
     def load_bs(self):
-        "bs = bar-space pattern. I copy-pasted this from an OCRed PDF so YTMND"
+        "loads CSV lookups. bs = bar-space pattern. I copy-pasted these CSVs from an OCRed PDF so YTMND"
         t0 = time.time()
         bs = {}
         for cluster in (0, 3, 6):
             reader = csv.reader(open(f"cluster-{cluster}-bs.csv"))
+            assert next(reader) == ['bsbsbsbs', 'codepoint'] # i.e. skip header & also check it
             lookup = {}
             for pattern, symbol in reader:
                 lookup[pattern] = int(symbol)
@@ -85,7 +86,9 @@ class Clip:
             'mixed': [],
             'punc': [],
         }
-        for i, (index, alpha, lower, mixed, punc) in enumerate(csv.reader(open('text-codes.csv'))):
+        reader = csv.reader(open('text-codes.csv'))
+        assert next(reader) == ['index', 'alpha', 'lower', 'mixed', 'punc'] # check & skip header
+        for i, (index, alpha, lower, mixed, punc) in enumerate(reader):
             assert int(index) == i
             text_codes['alpha'].append(maybe_int(alpha))
             text_codes['lower'].append(maybe_int(lower))

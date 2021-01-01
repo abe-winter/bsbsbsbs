@@ -8,10 +8,19 @@ Some caveats:
 
 * yes it works on PNG images, but it won't work on photos -- they have to be screenshots of a high-quality source (no, screenshot of a photo doesn't count. you can't wish for more wishes)
 * only has been tested on a single screenshot I took of my driver's license
-* doesn't fully implement the standard
+* doesn't fully implement the standard -- in particular, doesn't know how to do byte / numeric encodings, just text
 * I sourced the spec from [wikipedia](https://en.wikipedia.org/wiki/PDF417) and [this pdf](https://www.expresscorp.com/uploads/specifications/44/USS-PDF-417.pdf) and copied and pasted the lookup tables from OCR -- they may be incomplete or wrong
 
 That said, it has lots of asserts and has worked at least once.
+
+## Usage
+
+```
+# help text / flags
+./decoder.py -h
+# parse a PNG file
+./decoder.py barcode-screenshot.png
+```
 
 ## PDF417 lookup tables
 
@@ -29,3 +38,4 @@ In particular:
 * bugfixes as always
 * link to a better command-line barcode reader so I can archive this repo
 * support non-screenshot images (i.e. photos), preferably by using an external library to do the image scanning
+* use standard intermediate formats for barcode scans if those exist

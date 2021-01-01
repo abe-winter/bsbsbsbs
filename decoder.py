@@ -14,6 +14,9 @@ def cluster_number(bars):
     assert len(bars) == 4
     return (bars[0] - bars[1] + bars[2] - bars[3]) % 9
 
+def maybe_int(raw):
+    return int(raw) if raw.isdigit() else raw
+
 class Clip:
     def __init__(self):
         self.firstrow = None
@@ -21,6 +24,7 @@ class Clip:
         self.lineslices = None
         self.raw_words = None
         self.est_x = None
+        self.coderows = None
 
     def extract_lines(self, rows):
         "get identical line regions from image"
@@ -116,15 +120,18 @@ class Clip:
         return words, approxlen
 
     def parse_words(self):
-        "raw_words (list of chunks of regions) to pdf417 encoding"
+        "raw_words (list of chunks of regions) to codewords, i.e. looked-up integers that have to be further processed"
         # decoding rule is https://www.expresscorp.com/uploads/specifications/44/USS-PDF-417.pdf pg 3-4
-        raise NotImplementedError('port below to handle bar + space')
+        coderows = []
         for irow, row in enumerate(self.raw_words):
-            bar_chunks = [[round(bar / self.est_x) for bar in chunk] for chunk in row]
-            clusters = [cluster_number(chunk) for chunk in bar_chunks]
+            lengths = [[round(bar.length / self.est_x) for bar in chunk] for chunk in row]
+            clusters = [cluster_number(chunk[::2]) for chunk in lengths]
             assert all(cluster in (0, 3, 6) for cluster in clusters)
             assert all(cluster == 3 * (irow % 3) for cluster in clusters)
-        raise NotImplementedError
+            len_strs = [''.join(map(str, chunk)) for chunk in lengths]
+            lookup = self.bs[clusters[0]]
+            coderows.append([lookup[key] for key in len_strs])
+        self.coderows = coderows
 
     def load_bs(self):
         "bs = bar-space pattern. I copy-pasted this from an OCRed PDF so YTMND"
@@ -138,8 +145,23 @@ class Clip:
             assert list(lookup.values()) == list(range(len(lookup))) # i.e. expect ordering
             assert all(len(pattern) == 8 for pattern in lookup.keys())
             bs[cluster] = lookup
-        logging.debug('loaded bs tables in %.2fs', time.time() - t0)
         self.bs = bs
+
+        text_codes = {
+            'alpha': [],
+            'lower': [],
+            'mixed': [],
+            'punc': [],
+        }
+        for i, (index, alpha, lower, mixed, punc) in enumerate(csv.reader(open('text-codes.csv'))):
+            assert int(index) == i
+            text_codes['alpha'].append(maybe_int(alpha))
+            text_codes['lower'].append(maybe_int(lower))
+            text_codes['mixed'].append(maybe_int(mixed))
+            text_codes['punc'].append(maybe_int(punc))
+        self.text_codes = text_codes
+
+        logging.debug('loaded csvs in %.2fs', time.time() - t0)
 
     def infer_height(self, rows):
         # todo perf: only scan top-left tenth maybe
@@ -158,6 +180,25 @@ class Clip:
         else:
             raise AllWhiteError("at bottom")
 
+    def decode(self):
+        "partial implementation of mode switching"
+        assert self.coderows is not None
+        # symbol_len_descriptor = self.coderows[0][1]
+        # print(sum(map(len, self.coderows)) - 2 * len(self.coderows), symbol_len_descriptor)
+        # assert sum(map(len, self.coderows)) == symbol_len_descriptor
+        chars = []
+        for row in self.coderows:
+            for point in row[1:-1]: # ignoring LRI / RRI for now
+                if point > 899:
+                    print('command', point)
+                else:
+                    hichar = point // 30
+                    lowchar = point % 30
+                    chars.append(self.text_codes['alpha'][hichar])
+                    chars.append(self.text_codes['alpha'][lowchar])
+        print(chars)
+        raise NotImplementedError
+
 def decode_417(fname):
     "try to decode 4-bar, 1-space, 17-unit structure"
     width, height, rows_gen, info = png.Reader(filename=fname).asDirect()
@@ -171,6 +212,7 @@ def decode_417(fname):
     clip.parse_raw_words(rows)
     clip.load_bs()
     clip.parse_words()
+    clip.decode()
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)

@@ -15,7 +15,7 @@ class ModeState:
     def tick(self):
         "if link was a shift instead of a latch, return to base"
         if len(self.stack) > 1:
-            self.stack.pop()
+            popped = self.stack.pop()
 
     def command(self, codepoint):
         link = self.graph[codepoint]

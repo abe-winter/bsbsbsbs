@@ -23,6 +23,7 @@ class Clip:
         self.raw_words = None
         self.est_x = None
         self.coderows = None
+        self.decoded = None
 
     def extract_lines(self, rows):
         "get identical line regions from image"
@@ -117,17 +118,22 @@ class Clip:
         # symbol_len_descriptor = self.coderows[0][1]
         # print(sum(map(len, self.coderows)) - 2 * len(self.coderows), symbol_len_descriptor)
         # assert sum(map(len, self.coderows)) == symbol_len_descriptor
-        chunks = [[]]
         state = MainState()
         text_state = TextState()
+        chunks = []
+        old_mode = None
         for row in self.coderows:
             for point in row[1:-1]: # ignoring LRI / RRI for now
                 if point > 899:
                     state.command(point)
                     # todo: does text_state reset here?
-                    chunks.append([])
                 else:
+                    # note: everything before state.tick() *must* be before it
                     mode = state.state()
+                    if mode != old_mode:
+                        # todo: manage this with a container
+                        chunks.append([mode])
+                        old_mode = mode
                     state.tick()
                     if mode == 'text':
                         hichar = point // 30
@@ -143,8 +149,16 @@ class Clip:
                         print('todo byte')
                     elif mode == 'num':
                         print('todo num')
-        print(chunks)
-        raise NotImplementedError
+        self.decoded = chunks
+
+    def print(self):
+        assert self.decoded is not None
+        for chunk in self.decoded:
+            print('# type =', chunk[0])
+            if chunk[0] == 'text':
+                print(''.join(chunk[1:]))
+            else:
+                print('TODO TODO TODO')
 
 def decode_417(fname):
     "try to decode 4-bar, 1-space, 17-unit structure"
@@ -154,12 +168,12 @@ def decode_417(fname):
     assert all(len(row) == width * 4 for row in rows)
     clip = Clip()
     clip.infer_height(rows)
-    print(clip.firstrow, clip.lastrow)
     clip.extract_lines(rows)
     clip.parse_raw_words(rows)
     clip.load_bs()
     clip.parse_words()
     clip.decode()
+    clip.print()
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)

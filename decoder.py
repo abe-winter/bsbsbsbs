@@ -3,6 +3,7 @@
 
 import png, argparse, logging, csv, time
 from words import row_words
+from modes import MainState, TextState
 
 class AllWhiteError(Exception): "content not found in image"
 

@@ -13,6 +13,13 @@ Some caveats:
 
 That said, it has lots of asserts and has worked at least once.
 
+## PDF417 lookup tables
+
+There are some CSVs in here with PDF417 lookup tables.
+
+* cluster-{index}-bs.csv have bsbsbsbs (bar-space) lookups for clusters (0, 3, 6)
+* text-codes.csv has the lookup for converting hi & low text codes to ascii chars / state commands
+
 ## Contributions welcome
 
 In particular:

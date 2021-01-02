@@ -169,9 +169,12 @@ def decode_417(fname):
     width, height, rows_gen, info = png.Reader(filename=fname).asDirect()
     rows = list(rows_gen)
     clip = Clip()
+
+    # todo: factor out this stanza to a generic 2d barcode container that can be exported
     clip.infer_height(rows)
     clip.extract_lines(rows)
     clip.parse_raw_words(rows)
+
     clip.load_bs()
     clip.parse_words()
     clip.decode()

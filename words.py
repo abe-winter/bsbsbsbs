@@ -10,8 +10,8 @@ Region = collections.namedtuple('Region', 'isbar length')
 def chunk_run_lengths(run_lengths):
     "separate bars from spaces, group intermediate grays with *both* so they can get fractional lengths later"
     chunks = [[]]
-    assert run_lengths[0].level == 255 # or else the loop crashes because it doesn't append an initial chunk. yes this is repeating levels[0] levels[-1] assert above
-    # note: we're assuming that bars + spaces hit 0 / 255, i.e. no 'just grays'. I think the (0, 255), (255, 0) assert checks this case but hmm.
+    assert run_lengths[0].level == 255 and run_lengths[-1].level == 255 # or else the loop crashes because it doesn't append an initial chunk. yes this is repeating levels[0] levels[-1] assert above
+    # note: we're assuming that bars + spaces hit 0 / 255, i.e. no 'just grays'. I think the (0, 255), (255, 0) assert checks this case but hmm, low-res PNGs may break this assumption
     for i, tup in enumerate(run_lengths):
         # ugh these cases are messy and correctness depends on ordering
         if tup.level == 255:
@@ -25,6 +25,7 @@ def chunk_run_lengths(run_lengths):
         else:
             # note: i + 1 is safe because we know 0 and -1 indexes aren't gray
             assert (run_lengths[i - 1].level, run_lengths[i + 1].level) in ((0, 255), (255, 0))
+            # note: this is indeed appending the gray to *both* neighboring B/W regions; grays have inverse lengths with B vs W, so this still sums (we also assert the sum to prove this)
             chunks[-1].append(tup)
             chunks.append([tup])
     return chunks
@@ -49,7 +50,12 @@ def chunks_to_regions(chunks):
 
     return regions
 
+def chunkby(sequence, size):
+    assert len(sequence) % size == 0
+    return [sequence[size * i:size * (i + 1)] for i in range(len(sequence) // size)]
+
 def row_words(row):
+    "take row as PNG array, return [[Region, ...]] list of lists broken up into words (8-region sublists w 4 bars, 4 spaces). Return value has pixel coords, not X-units"
     # note: checking red only (of RGBA) on the assumption this is nice grayscale
     levels = [redpix for redpix in row[::4]]
     assert levels[0] == 255 and levels[-1] == 255 # logic slightly depends on white borders
@@ -75,9 +81,7 @@ def row_words(row):
     # logging.debug('approxlen %s len17 %s regions %d', approxlen, len17, len(regions))
 
     center = regions[9:-10] # 4 bars * 2 (for space) + 1 (for quiet) at start, 5 * 2 at end (no + 1 because the extra space belongs to a word)
-    assert len(center) % 8 == 0 # 8 because each word has 4 bar + 4 space
-
-    words = [center[8 * i:8 * (i+1)] for i in range(len(center) // 8)]
+    words = chunkby(center, 8) # 8 because each word has 4 bars + 4 spaces
     assert all(round(10 * sum(reg.length for reg in word) / len17) == 10 for word in words) # i.e. test to 2 sigfigs
 
     return words, approxlen

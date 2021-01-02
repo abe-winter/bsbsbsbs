@@ -165,10 +165,9 @@ class Clip:
 
 def decode_417(fname):
     "try to decode 4-bar, 1-space, 17-unit structure"
+    # todo: instantly decode to grayscale to (1) use less memory and (2) simplify model downstream
     width, height, rows_gen, info = png.Reader(filename=fname).asDirect()
     rows = list(rows_gen)
-    assert len(rows) == height
-    assert all(len(row) == width * 4 for row in rows)
     clip = Clip()
     clip.infer_height(rows)
     clip.extract_lines(rows)

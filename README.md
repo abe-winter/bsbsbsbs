@@ -15,7 +15,7 @@ That said, it has lots of asserts and has worked at least once.
 
 ## Usage
 
-```
+```sh
 # help text / flags
 ./decoder.py -h
 # parse a PNG file
@@ -39,3 +39,4 @@ In particular:
 * link to a better command-line barcode reader so I can archive this repo
 * support non-screenshot images (i.e. photos), preferably by using an external library to do the image scanning
 * use standard intermediate formats for barcode scans if those exist
+* `git grep todo`
